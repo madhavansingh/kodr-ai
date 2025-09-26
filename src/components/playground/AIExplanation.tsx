@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
-import { Brain, Lightbulb, AlertCircle, CheckCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Brain, Lightbulb, AlertCircle, CheckCircle, ChevronDown, ChevronUp, Download } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -137,6 +138,34 @@ export function AIExplanation({ code, language, highlightedLine, onLineHighlight
     setExpandedItems(newExpanded);
   };
 
+  const downloadExplanation = useCallback(() => {
+    if (explanations.length === 0) {
+      toast.error("No explanations to download!");
+      return;
+    }
+    
+    const explanationText = [
+      `Code Explanation - ${language.toUpperCase()}`,
+      '='.repeat(50),
+      '',
+      ...explanations.map(exp => 
+        `Line ${exp.lineNumber}: ${exp.explanation}\nCode: ${exp.code}\nType: ${exp.type} | Difficulty: ${exp.difficulty}\n`
+      ),
+      '',
+      `Generated on: ${new Date().toLocaleString()}`,
+      'Powered by Kodr AI'
+    ].join('\n');
+    
+    const blob = new Blob([explanationText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `kodr-explanation-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Explanation downloaded!");
+  }, [explanations, language]);
+
   if (isAnalyzing) {
     return (
       <div className="flex flex-col h-full">
@@ -171,9 +200,21 @@ export function AIExplanation({ code, language, highlightedLine, onLineHighlight
             <Brain className="w-5 h-5 text-primary" />
             <h3 className="text-lg font-semibold">AI Explanations</h3>
           </div>
-          <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
-            {explanations.length} insights
-          </Badge>
+          <div className="flex items-center space-x-2">
+            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+              {explanations.length} insights
+            </Badge>
+            {explanations.length > 0 && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={downloadExplanation}
+                title="Download explanation"
+              >
+                <Download className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 

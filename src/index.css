@@ -211,4 +211,35 @@
   .syntax-comment { color: hsl(var(--muted-foreground)); }
   .syntax-function { color: hsl(48 100% 67%); }
   .syntax-variable { color: hsl(180 100% 50%); }
+
+  /* Animation utilities */
+  .animate-code-highlight {
+    animation: highlight 2s ease-in-out;
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes highlight {
+    0%, 100% { 
+      background-color: transparent; 
+      border-left-color: transparent;
+    }
+    50% { 
+      background-color: hsl(var(--primary) / 0.1); 
+      border-left-color: hsl(var(--primary));
+    }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      opacity: 1;
+      box-shadow: 0 0 20px hsl(var(--primary) / 0.3);
+    }
+    50% {
+      opacity: 0.8;
+      box-shadow: 0 0 30px hsl(var(--primary) / 0.5);
+    }
+  }
 }

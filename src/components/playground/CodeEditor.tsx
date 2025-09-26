@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect } from "react";
-import { Play, Copy, Download, RotateCcw } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Play, Copy, Download, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface CodeEditorProps {
   onCodeChange?: (code: string) => void;
@@ -116,11 +117,12 @@ export function CodeEditor({ onCodeChange, onLanguageChange, highlightedLine }: 
     onCodeChange?.(newCode);
   };
 
-  const copyCode = () => {
+  const copyCode = useCallback(() => {
     navigator.clipboard.writeText(code);
-  };
+    toast.success("Code copied to clipboard!");
+  }, [code]);
 
-  const downloadCode = () => {
+  const downloadCode = useCallback(() => {
     const extension = language === "cpp" ? "cpp" : language === "python" ? "py" : language === "java" ? "java" : "js";
     const blob = new Blob([code], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
@@ -129,18 +131,113 @@ export function CodeEditor({ onCodeChange, onLanguageChange, highlightedLine }: 
     a.download = `code.${extension}`;
     a.click();
     URL.revokeObjectURL(url);
-  };
+    toast.success("Code downloaded!");
+  }, [code, language]);
 
-  const resetCode = () => {
+  const clearCode = useCallback(() => {
+    setCode("");
+    onCodeChange?.("");
+    toast.success("Code cleared!");
+  }, [onCodeChange]);
+
+  const resetCode = useCallback(() => {
     const originalCode = sampleCode[language as keyof typeof sampleCode];
     setCode(originalCode);
     onCodeChange?.(originalCode);
-  };
+    toast.success("Code reset to sample!");
+  }, [language, onCodeChange]);
 
-  const runCode = () => {
-    // Placeholder for code execution
+  const runCode = useCallback(() => {
     console.log("Running code:", code);
-  };
+    toast.success("Code executed!");
+  }, [code]);
+
+  // Handle tab key for indentation
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const textarea = e.currentTarget;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      
+      if (e.shiftKey) {
+        // Shift+Tab: Remove indentation
+        const lines = code.split('\n');
+        const startLine = code.substring(0, start).split('\n').length - 1;
+        const endLine = code.substring(0, end).split('\n').length - 1;
+        
+        let newCode = '';
+        let newStart = start;
+        let newEnd = end;
+        
+        lines.forEach((line, index) => {
+          if (index >= startLine && index <= endLine && line.startsWith('  ')) {
+            const newLine = line.substring(2);
+            newCode += newLine;
+            if (index < startLine || (index === startLine && start > code.substring(0, code.split('\n').slice(0, index).join('\n').length + (index > 0 ? 1 : 0)).length + 2)) {
+              newStart -= 2;
+            }
+            if (index < endLine || (index === endLine && end > code.substring(0, code.split('\n').slice(0, index).join('\n').length + (index > 0 ? 1 : 0)).length + 2)) {
+              newEnd -= 2;
+            }
+          } else {
+            newCode += line;
+          }
+          if (index < lines.length - 1) newCode += '\n';
+        });
+        
+        setCode(newCode);
+        onCodeChange?.(newCode);
+        
+        setTimeout(() => {
+          textarea.setSelectionRange(Math.max(0, newStart), Math.max(0, newEnd));
+        }, 0);
+      } else {
+        // Tab: Add indentation
+        const newCode = code.substring(0, start) + '  ' + code.substring(end);
+        setCode(newCode);
+        onCodeChange?.(newCode);
+        
+        setTimeout(() => {
+          textarea.setSelectionRange(start + 2, start + 2);
+        }, 0);
+      }
+    }
+  }, [code, onCodeChange]);
+
+  // Handle click to position cursor
+  const handleCodeClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const codeContainer = e.currentTarget;
+    const rect = codeContainer.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Calculate line and character position
+    const lineHeight = 28; // 1.75rem in pixels
+    const lineNumber = Math.floor(y / lineHeight);
+    const lines = code.split('\n');
+    
+    if (lineNumber >= 0 && lineNumber < lines.length) {
+      // Calculate character position within the line
+      const line = lines[lineNumber];
+      const charWidth = 8.4; // Approximate character width in monospace font
+      const lineNumberWidth = 64; // Width of line number column (4rem)
+      const charPosition = Math.max(0, Math.floor((x - lineNumberWidth) / charWidth));
+      
+      // Calculate cursor position in the entire text
+      let position = 0;
+      for (let i = 0; i < lineNumber; i++) {
+        position += lines[i].length + 1; // +1 for newline
+      }
+      position += Math.min(charPosition, line.length);
+      
+      // Focus textarea and set cursor position
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(position, position);
+      }
+    }
+  }, [code]);
 
   const renderCodeWithLineNumbers = () => {
     const lines = code.split('\n');
@@ -148,12 +245,16 @@ export function CodeEditor({ onCodeChange, onLanguageChange, highlightedLine }: 
       <div
         key={index}
         className={cn(
-          "code-line",
-          highlightedLine === index + 1 && "highlighted animate-code-highlight"
+          "flex items-start h-7 group transition-colors duration-200",
+          highlightedLine === index + 1 && "bg-primary/10 border-l-2 border-primary animate-pulse"
         )}
       >
-        <span className="line-number">{index + 1}</span>
-        <span className="flex-1 whitespace-pre">{line || " "}</span>
+        <span className="w-16 flex-shrink-0 text-right pr-4 text-muted-foreground/60 select-none font-mono text-sm leading-7">
+          {index + 1}
+        </span>
+        <span className="flex-1 whitespace-pre font-mono text-sm leading-7 min-h-[1.75rem]">
+          {line || " "}
+        </span>
       </div>
     ));
   };
@@ -183,22 +284,28 @@ export function CodeEditor({ onCodeChange, onLanguageChange, highlightedLine }: 
         </div>
 
         <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" onClick={copyCode}>
+          <Button variant="outline" size="sm" onClick={copyCode} title="Copy code">
             <Copy className="w-4 h-4" />
           </Button>
-          <Button variant="outline" size="sm" onClick={downloadCode}>
+          <Button variant="outline" size="sm" onClick={downloadCode} title="Download code">
             <Download className="w-4 h-4" />
           </Button>
-          <Button variant="outline" size="sm" onClick={resetCode}>
+          <Button variant="outline" size="sm" onClick={clearCode} title="Clear code">
+            <Trash2 className="w-4 h-4" />
+          </Button>
+          <Button variant="outline" size="sm" onClick={resetCode} title="Reset to sample">
             <RotateCcw className="w-4 h-4" />
           </Button>
         </div>
       </div>
 
       {/* Code Editor */}
-      <div className="flex-1 relative">
-        <div className="absolute inset-0 code-editor overflow-auto">
-          <div className="font-code text-sm leading-relaxed">
+      <div className="flex-1 relative bg-card border-t border-border">
+        <div 
+          className="absolute inset-0 overflow-auto cursor-text"
+          onClick={handleCodeClick}
+        >
+          <div className="p-4 font-mono text-sm">
             {renderCodeWithLineNumbers()}
           </div>
         </div>
@@ -207,12 +314,15 @@ export function CodeEditor({ onCodeChange, onLanguageChange, highlightedLine }: 
           ref={textareaRef}
           value={code}
           onChange={(e) => handleCodeChange(e.target.value)}
-          className="absolute inset-0 w-full h-full bg-transparent text-transparent caret-primary resize-none outline-none font-code text-sm leading-relaxed p-4 pl-16"
+          onKeyDown={handleKeyDown}
+          className="absolute inset-0 w-full h-full bg-transparent text-transparent caret-primary resize-none outline-none font-mono text-sm p-4 pl-20 leading-7"
           spellCheck={false}
           style={{ 
             lineHeight: '1.75rem',
             tabSize: 2,
+            caretColor: 'hsl(var(--primary))',
           }}
+          placeholder="Start typing or paste your code here..."
         />
       </div>
     </div>
